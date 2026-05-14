@@ -50,3 +50,7 @@ Thumbs.db
 # KSP specific
 *.log
 KSP.log
+
+# Release packages
+Release-Package/
+*.zip
