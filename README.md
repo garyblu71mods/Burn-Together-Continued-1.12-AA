@@ -5,6 +5,8 @@
 
 A revival of the classic BurnTogether formation flying mod for Kerbal Space Program 1.12.
 
+**📖 [Dokumentacja w języku polskim](INSTRUKCJA_PL.md) | [Szybki Start (PL)](SZYBKI_START_PL.md)**
+
 ## Overview
 
 BurnTogether allows multiple vessels to fly in formation, with one vessel acting as a leader and others following. Perfect for:
