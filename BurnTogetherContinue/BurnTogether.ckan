@@ -1,0 +1,22 @@
+{
+  "spec_version"   : "v1.4",
+  "identifier"     : "BurnTogether",
+  "name"           : "BurnTogether",
+  "abstract"       : "Formation flying mod for KSP - allows vessels to follow a leader",
+  "description"    : "BurnTogether is a mod for Kerbal Space Program that allows you to set vessels to follow the leader. Features include coordinated rotation, RCS-based velocity matching, action group mimic, and automatic throttle coordination.",
+  "category"       : "Command and Control",
+  "license"        : "CC-BY-NC-SA",
+  "author"         : ["BahamutoD", "PapaJoesSoup"],
+  "resources": {
+    "repository": "https://github.com/PapaJoesSoup/BurnTogether"
+  },
+  "version"        : "1.4.1",
+  "ksp_version_min": "1.12.0",
+  "ksp_version_max": "1.12.9",
+  "install": [
+    {
+      "file": "BurnTogether.dll",
+      "install_to": "GameData/BurnTogether/Plugins"
+    }
+  ]
+}
