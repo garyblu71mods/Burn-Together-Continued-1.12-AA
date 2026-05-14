@@ -31,9 +31,11 @@ namespace BurnTogetherContinue
 		private bool beginWarp = true;
 
 		[KSPField(isPersistant = false, guiActive = true, guiName = "Status")]
-        public string statusGui = "Off";
+		public string statusGui = "Off";
 		[KSPField(isPersistant = false, guiActive = true, guiName = "AG Mimic")]
 		public bool mimicAG = false;
+		[KSPField(isPersistant = false, guiActive = true, guiName = "AA Integration")]
+		public string aaStatusGui = "Checking...";
 
 
 		string debugString = string.Empty;
@@ -457,27 +459,29 @@ namespace BurnTogetherContinue
 		public override void OnStart(PartModule.StartState state)
 		{
 			//Debug.Log("BT Start");
-			
+
 			indicatorStates = Utils.SetUpAnimation ("indicatorLight", this.part);
-			
-			
+
+
 			SetOff ();
-			
+
 			/*
 			foof = gameObject.AddComponent<LineRenderer>(); //debug
 			foof.SetWidth(0.5f, 0.1f);
 			foof.SetVertexCount(6);
 			*/
-			
+
 			part.OnJustAboutToBeDestroyed += new Callback(SetOff);
 
-
+			// Initialize AA integration status
+			UpdateAAStatus();
 		}
 		
 		
 		public override void OnUpdate()
 		{
 			ShowHideCustomDamper();
+			UpdateAAStatus();
 
 			if(HighLogic.LoadedSceneIsFlight)
 			{
@@ -750,12 +754,9 @@ namespace BurnTogetherContinue
 					yaw = 0;
 				}
 
-				//finally set control state inputs
-				s.pitch = pitch;
-				s.roll = roll;
-				s.yaw = yaw;
-
-				s.mainThrottle = followerThrottle;
+				// Use AA integration if available, otherwise use direct control
+				// AA provides better stability and removes oscillations for atmospheric flight
+				AAIntegration.SetControlState(vessel, s, pitch, roll, yaw, followerThrottle);
 			}
 		}
 		
@@ -926,6 +927,25 @@ namespace BurnTogetherContinue
 				Fields["cRollDamper"].guiActiveEditor = false;
 				Fields["cYawDamper"].guiActive = false;
 				Fields["cYawDamper"].guiActiveEditor = false;
+			}
+		}
+
+		void UpdateAAStatus()
+		{
+			if (AAIntegration.IsAAAvailable)
+			{
+				if (isFollowing && AAIntegration.IsAAActiveOnVessel(vessel))
+				{
+					aaStatusGui = "Active";
+				}
+				else
+				{
+					aaStatusGui = "Available";
+				}
+			}
+			else
+			{
+				aaStatusGui = "Not Installed";
 			}
 		}
 

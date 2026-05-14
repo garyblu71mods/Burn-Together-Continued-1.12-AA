@@ -1,5 +1,22 @@
 # BurnTogether Changelog
 
+## Version 1.4.2 (AA Integration Update)
+
+### Added
+- **Atmospheric Autopilot Integration**: Automatic compatibility with Atmospheric Autopilot mod
+  - BurnTogether now routes follower control inputs through AA's fly-by-wire system when available
+  - Provides significantly better stability and smoother flight for aircraft formations
+  - Eliminates oscillations in atmospheric flight
+  - Falls back to direct control if AA is not installed
+- New GUI field showing AA integration status ("Active", "Available", or "Not Installed")
+- Reflection-based integration (no hard dependency on AA)
+
+### Technical Details
+- Created AAIntegration.cs wrapper for optional AA mod detection
+- Modified FollowLeader() to use AA API when available
+- Control inputs routed through AA's StandardFlyByWire module
+- Automatic fallback to direct ctrlState when AA not present
+
 ## Version 1.4.1 (KSP 1.12 Revival)
 
 ### Fixed

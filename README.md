@@ -24,6 +24,7 @@ BurnTogether allows multiple vessels to fly in formation, with one vessel acting
 - **Warp Synchronization**: Maintains formation through time warp
 - **Custom Damping**: Adjustable pitch/roll/yaw damping for smooth control
 - **Torque Overdrive**: Extra control authority when needed
+- **Atmospheric Autopilot Integration**: Automatic compatibility with [Atmospheric Autopilot](https://github.com/Boris-Barboris/AtmosphereAutopilot) for enhanced atmospheric flight stability
 
 ## Installation
 
@@ -82,10 +83,34 @@ BurnTogether adds buttons to the **Part Action Window (PAW)** of all command pod
 - **AG Mimic**: When enabled, action groups triggered on leader also fire on followers
 - **Rover Mode**: Automatically engaged for ground vehicles
 
+### Atmospheric Autopilot Integration
+
+BurnTogether now features **automatic integration** with [Atmospheric Autopilot](https://github.com/Boris-Barboris/AtmosphereAutopilot) (AA)!
+
+**Benefits:**
+- **Better Stability**: AA's advanced control algorithms eliminate oscillations
+- **Smoother Flight**: PID-based control provides more natural aircraft behavior
+- **No Configuration Needed**: Integration is automatic when both mods are installed
+
+**How It Works:**
+- When AA is installed and active on a follower vessel, BurnTogether automatically routes control inputs through AA's fly-by-wire system
+- If AA is not available, BurnTogether falls back to direct control (standard behavior)
+- The PAW shows **"AA Integration"** status: "Active", "Available", or "Not Installed"
+
+**Setup:**
+1. Install both BurnTogether and Atmospheric Autopilot
+2. On follower aircraft, enable AA's Standard Fly-By-Wire
+3. Set the vessel as follower in BurnTogether
+4. BurnTogether will automatically use AA for smoother formation flight!
+
+**Note**: AA integration is **optional** - BurnTogether works perfectly without it.
+
 ## Compatibility
 
 - **KSP Version**: 1.12.0 - 1.12.9
-- **Dependencies**: None
+- **Dependencies**: None (Atmospheric Autopilot is optional but recommended for aircraft)
+- **Optional Mods**: 
+  - [Atmospheric Autopilot](https://github.com/Boris-Barboris/AtmosphereAutopilot) - Enhanced atmospheric flight control (auto-detected)
 - **Conflicts**: None known
 
 ## Building from Source
