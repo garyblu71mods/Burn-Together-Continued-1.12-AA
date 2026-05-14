@@ -14,10 +14,8 @@ namespace BurnTogetherContinue
 		//public float throttleLimitFactor = 1;
 		public bool roverMode = false;
 
-		/*
 		[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = false, guiName = "Atmo Mode"), 
 		 UI_Toggle(disabledText = "Off", enabledText = "On")]
-		 */
 		public bool atmosphericMode = false;
 
 		Dictionary<Vessel, Vector3> warpFollowers; //follower vessel, follower relative position
@@ -34,9 +32,6 @@ namespace BurnTogetherContinue
 		public string statusGui = "Off";
 		[KSPField(isPersistant = false, guiActive = true, guiName = "AG Mimic")]
 		public bool mimicAG = false;
-		[KSPField(isPersistant = false, guiActive = true, guiName = "AA Integration")]
-		public string aaStatusGui = "Checking...";
-
 
 		string debugString = string.Empty;
 
@@ -47,6 +42,17 @@ namespace BurnTogetherContinue
 		double prevRollAngle;
 		double rollAngVel;
 
+		// PID integral terms
+		double pitchIntegral;
+		double rollIntegral;
+		double yawIntegral;
+		double maxIntegral = 0.1;
+
+		// Auto-tuned PID gains
+		Vector3d autoKp = Vector3d.one;
+		Vector3d autoKi = Vector3d.one * 0.1;
+		Vector3d autoKd = Vector3d.one * 500;
+		double lastAutotuneTime = 0;
 
 		[KSPField(isPersistant = true, guiActive = true, guiName = "Damper")]
 		public string damperDebug;
@@ -69,6 +75,10 @@ namespace BurnTogetherContinue
 		 UI_Toggle(disabledText = "Damping Off", enabledText = "Damping On")]
 		public bool customDamping = false;
 		bool displayingDamper = true;
+
+		[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = false, guiName = "PID Mode"), 
+		 UI_Toggle(disabledText = "Off", enabledText = "On")]
+		public bool pidMode = true;
 
 		[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = false, guiName = "Overdrive"), 
 		 UI_Toggle(disabledText = "Off", enabledText = "On")]
@@ -111,15 +121,13 @@ namespace BurnTogetherContinue
 			{
 				if(!v.packed)
 				{
-					Debug.Log ("Checking if leader: "+v.vesselName);
+					Debug.Log("[BurnTogether] Checking if leader: "+v.vesselName);
 					foreach(BurnTogether pp in v.FindPartModulesImplementing<BurnTogether>())
 					{
-						//Debug.Log ("Found BurnTogether module");
 						if(pp.isLeader)
 						{
 							leader = pp;
 							hasLeader = true;
-							//Debug.Log ("Found Leader.");
 							if(vessel == FlightGlobals.ActiveVessel)
 							{
 								ScreenMessages.PostScreenMessage("Following "+leader.vessel.vesselName, 5, ScreenMessageStyle.UPPER_CENTER);
@@ -153,7 +161,7 @@ namespace BurnTogetherContinue
 
 			if(!hasLeader)//if leader not found
 			{
-				Debug.Log ("Could not find leader.");
+				Debug.Log("[BurnTogether] Could not find leader.");
 				ScreenMessages.PostScreenMessage("Could not find a leader.", 5, ScreenMessageStyle.UPPER_CENTER);
 				SetOff ();
 			}
@@ -209,7 +217,7 @@ namespace BurnTogetherContinue
 				}
 				if(atmosphericMode)
 				{
-					Debug.Log ("atmosphericMode disabled");
+					Debug.Log("[BurnTogether] atmosphericMode disabled");
 					atmosphericMode = false;
 				}
 
@@ -244,6 +252,11 @@ namespace BurnTogetherContinue
 			leader = null;
 			statusGui = "Off";
 			//throttleLimitFactor = 1;
+
+			// Reset PID integral terms
+			pitchIntegral = 0;
+			rollIntegral = 0;
+			yawIntegral = 0;
 		}
 		
 		
@@ -458,71 +471,41 @@ namespace BurnTogetherContinue
 		
 		public override void OnStart(PartModule.StartState state)
 		{
-			//Debug.Log("BT Start");
-
 			indicatorStates = Utils.SetUpAnimation ("indicatorLight", this.part);
 
+				SetOff ();
 
-			SetOff ();
+				part.OnJustAboutToBeDestroyed += new Callback(SetOff);
+			}
 
-			/*
-			foof = gameObject.AddComponent<LineRenderer>(); //debug
-			foof.SetWidth(0.5f, 0.1f);
-			foof.SetVertexCount(6);
-			*/
 
-			part.OnJustAboutToBeDestroyed += new Callback(SetOff);
-
-			// Initialize AA integration status
-			UpdateAAStatus();
-		}
-		
-		
-		public override void OnUpdate()
-		{
-			ShowHideCustomDamper();
-			UpdateAAStatus();
-
-			if(HighLogic.LoadedSceneIsFlight)
+			public override void OnUpdate()
 			{
-				/*
-				if(!vessel.IsControllable && TimeWarp.CurrentRate == 1) //turn off when vessel is uncontrollable
-				{
-					SetOff ();
-				}
-				*/
+				ShowHideCustomDamper();
 
-
-				if(isLeader)
+				if(HighLogic.LoadedSceneIsFlight)
 				{
-					MoveWarpFollowers();
-				}
-				
-				
-				else if(isFollowing && hasLeader && leader!=null && !vessel.packed) //following leader
-				{
-					if(TimeWarp.WarpMode == TimeWarp.Modes.LOW || TimeWarp.CurrentRate == 1)
+					if(isLeader)
 					{
-						/*
-						if((leader.vessel.GetWorldPos3D()-vessel.GetWorldPos3D()).sqrMagnitude > Vessel.unloadDistance*Vessel.unloadDistance)
+						MoveWarpFollowers();
+					}
+
+					else if(isFollowing && hasLeader && leader!=null && !vessel.packed)
+					{
+						if(TimeWarp.WarpMode == TimeWarp.Modes.LOW || TimeWarp.CurrentRate == 1)
 						{
-							SetOff ();
-						}
-						*/
+							mimicAG = leader.mimicAG;
 
-
-						mimicAG = leader.mimicAG;	//activate/deactivate mimicAG on followers
-
-						if(vessel.Landed)  //===================================================================Rover Mode===============
-						{
-							if(!roverMode)
+							if(vessel.Landed)
 							{
-								Debug.Log ("roverMode enabled");
-								roverMode = true;
-								this.vessel.OnFlyByWire += new FlightInputCallback(RoverControl);
-								if(atmosphericMode)
+								if(!roverMode)
 								{
-									Debug.Log ("atmosphericMode disabled");
+									Debug.Log("[BurnTogether] [BurnTogether] Rover mode enabled");
+									roverMode = true;
+									this.vessel.OnFlyByWire += new FlightInputCallback(RoverControl);
+									if(atmosphericMode)
+									{
+										Debug.Log("[BurnTogether] [BurnTogether] Atmospheric mode disabled");
 									atmosphericMode = false;
 								}
 							}
@@ -531,7 +514,7 @@ namespace BurnTogetherContinue
 						{
 							if(roverMode)
 							{
-								Debug.Log ("roverMode disabled");
+								Debug.Log("[BurnTogether] roverMode disabled");
 								roverMode = false;
 								this.vessel.OnFlyByWire -= new FlightInputCallback(RoverControl);
 							}
@@ -651,7 +634,7 @@ namespace BurnTogetherContinue
 						}
 					}
 
-					Debug.Log ("Going into warp with "+warpFollowers.Count+" locked followers");
+					Debug.Log("[BurnTogether] Going into warp with "+warpFollowers.Count+" locked followers");
 				}
 
 
@@ -680,7 +663,7 @@ namespace BurnTogetherContinue
 						wFollower.Key.orbit.UpdateFromStateVectors(newPosition.xzy, vessel.obt_velocity.xzy, vessel.mainBody, Planetarium.GetUniversalTime());
 					}
 
-					Debug.Log ("Coming out of warp with "+warpFollowers.Count+" locked followers");
+					Debug.Log("[BurnTogether] Coming out of warp with "+warpFollowers.Count+" locked followers");
 				}
 
 				beginWarp = true;
@@ -688,21 +671,70 @@ namespace BurnTogetherContinue
 			}
 			//end leader warp handling
 		}
-		
-		
+
+
 		//=======Flight Inputs============
 
-		//prototype
-		public void FollowLeader(FlightCtrlState s)
+		void AutotunePID()
+		{
+			// Autotune PID gains based on vessel characteristics
+			// Run this every 2 seconds to adapt to fuel consumption / staging
+			if (Time.time - lastAutotuneTime < 2.0)
+				return;
+
+			lastAutotuneTime = Time.time;
+
+			try
+			{
+				Vector3d torque = Utils.GetTorque(vessel, 0);
+				Vector3 momentOfInertia = vessel.localCoM;
+
+				// Calculate control authority (torque / inertia)
+				// Higher control authority = more aggressive controls needed
+				Vector3d controlAuthority = new Vector3d(
+					torque.x / (Math.Abs(momentOfInertia.x) + 0.01),
+					torque.y / (Math.Abs(momentOfInertia.y) + 0.01),
+					torque.z / (Math.Abs(momentOfInertia.z) + 0.01)
+				);
+
+				// Proportional gain: inverse of control authority
+				// Low authority = need more aggressive P
+				autoKp.x = Utils.Clamp(1.0 / (controlAuthority.x + 0.1), 0.5, 2.0);
+				autoKp.y = Utils.Clamp(1.0 / (controlAuthority.y + 0.1), 0.5, 2.0);
+				autoKp.z = Utils.Clamp(1.0 / (controlAuthority.z + 0.1), 0.5, 2.0);
+
+				// Derivative gain: based on moment of inertia
+				// Higher inertia = need more damping
+				double baseD = atmosphericMode ? 600 : 450;
+				autoKd.x = Utils.Clamp(baseD * (1.0 + Math.Abs(momentOfInertia.x) * 0.1), 200, 800);
+				autoKd.y = Utils.Clamp(baseD * (1.0 + Math.Abs(momentOfInertia.y) * 0.1), 150, 800);
+				autoKd.z = Utils.Clamp(baseD * (1.0 + Math.Abs(momentOfInertia.z) * 0.1), 200, 800);
+
+				// Integral gain: smaller than P, scales with control authority
+				double baseI = atmosphericMode ? 0.25 : 0.12;
+				autoKi.x = Utils.Clamp(baseI * autoKp.x, 0.05, 0.4);
+				autoKi.y = Utils.Clamp(baseI * autoKp.y, 0.05, 0.4);
+				autoKi.z = Utils.Clamp(baseI * autoKp.z, 0.05, 0.4);
+
+				// Debug output
+				damperDebug = "P:" + autoKp.x.ToString("F2") + " I:" + autoKi.x.ToString("F2") + " D:" + autoKd.x.ToString("F0");
+			}
+			catch (Exception ex)
+			{
+						Debug.LogWarning("[BurnTogether] Autotune error: " + ex.Message);
+					}
+				}
+
+				public void FollowLeader(FlightCtrlState s)
 		{
 			if(leader!=null && s!=null)
 			{
 				double maxControl = torqueOverdrive ? 1.5 : 1.0;
 				Vector3d damper = Vector3d.zero;
 				Vector3 centerOfMass = vessel.CoM;
-			  Vector3 momentOfInertia = vessel.localCoM; // was   .findLocalMOI(centerOfMass);
+				Vector3 momentOfInertia = vessel.localCoM;
 
-				//automatic damping (needs improvement)
+				// Calculate damping coefficients for legacy PD mode
 				if(!customDamping)
 				{
 					Vector3d torque = Utils.GetTorque(vessel, 0);
@@ -710,7 +742,7 @@ namespace BurnTogetherContinue
 					Vector3d controlAuthority = Vector3d.Scale(torque, Utils.Inverse(momentOfInertia));
 					damper = 4500 * Utils.Inverse(Utils.Abs(controlAuthority)+Vector3d.one);
 
-					//test: increased roll damping
+					// Increased roll damping
 					damper = Vector3d.Scale(damper, new Vector3d(1, 1.2, 1));
 
 					damper = Utils.ClampAxes(damper, 180, 750);
@@ -720,22 +752,63 @@ namespace BurnTogetherContinue
 					damper = new Vector3(cPitchDamper, cRollDamper, cYawDamper);
 				}
 
-				damperDebug = ((float)damper.x).ToString("0")+", "+((float)damper.y).ToString("0")+", "+((float)damper.z).ToString("0");
-
 				Vector3d steerMult = Vector3d.one;
 				if(atmosphericMode)
 				{
-					steerMult *= 1.5;
-					damper = new Vector3d(650,350,650);
+					steerMult *= 1.2;
+					damper = new Vector3d(700,400,700);
 				}
 
 				double damperPitch = Math.Abs(damper.x);
 				double damperRoll = Math.Abs(damper.y);
 				double damperYaw = Math.Abs(damper.z);
 
-				float pitch = (float)Utils.Clamp((steerMult.x*prevPitchAngle)+(damperPitch*pitchAngVel), -maxControl, maxControl);
-				float roll = (float)Utils.Clamp((steerMult.y*prevRollAngle)+(damperRoll*rollAngVel), -maxControl, maxControl);
-				float yaw = (float)Utils.Clamp((steerMult.z*prevYawAngle)+(damperYaw*yawAngVel), -maxControl, maxControl);
+				float pitch, roll, yaw;
+
+				if (pidMode)
+				{
+					// Run autotune periodically to adapt to vessel changes
+					AutotunePID();
+
+					// PID controller with integral term to reduce oscillations
+					double dt = TimeWarp.fixedDeltaTime;
+
+					// Accumulate integral (with anti-windup)
+					pitchIntegral += prevPitchAngle * dt;
+					rollIntegral += prevRollAngle * dt;
+					yawIntegral += prevYawAngle * dt;
+
+					// Clamp integral to prevent windup
+					pitchIntegral = Utils.Clamp(pitchIntegral, -maxIntegral, maxIntegral);
+					rollIntegral = Utils.Clamp(rollIntegral, -maxIntegral, maxIntegral);
+					yawIntegral = Utils.Clamp(yawIntegral, -maxIntegral, maxIntegral);
+
+					// Use autotuned gains
+					pitch = (float)Utils.Clamp(
+						(autoKp.x * prevPitchAngle) + 
+						(autoKi.x * pitchIntegral) + 
+						(autoKd.x * pitchAngVel), 
+						-maxControl, maxControl);
+
+					roll = (float)Utils.Clamp(
+						(autoKp.y * prevRollAngle) + 
+						(autoKi.y * rollIntegral) + 
+						(autoKd.y * rollAngVel), 
+						-maxControl, maxControl);
+
+						yaw = (float)Utils.Clamp(
+							(autoKp.z * prevYawAngle) + 
+							(autoKi.z * yawIntegral) + 
+							(autoKd.z * yawAngVel), 
+							-maxControl, maxControl);
+					}
+					else
+				{
+					// Original PD controller (no integral)
+					pitch = (float)Utils.Clamp((steerMult.x*prevPitchAngle)+(damperPitch*pitchAngVel), -maxControl, maxControl);
+					roll = (float)Utils.Clamp((steerMult.y*prevRollAngle)+(damperRoll*rollAngVel), -maxControl, maxControl);
+					yaw = (float)Utils.Clamp((steerMult.z*prevYawAngle)+(damperYaw*yawAngVel), -maxControl, maxControl);
+				}
 
 
 				//limit angular momentum
@@ -749,18 +822,20 @@ namespace BurnTogetherContinue
 				{
 					roll = 0;
 				}
-				if((int)Mathf.Sign(yaw) != Math.Sign(yawAngVel) && Math.Abs(localAngMomentum.z) > maxAngMomentum)
-				{
-					yaw = 0;
+						if((int)Mathf.Sign(yaw) != Math.Sign(yawAngVel) && Math.Abs(localAngMomentum.z) > maxAngMomentum)
+						{
+							yaw = 0;
+						}
+
+						// Apply control state
+						s.pitch = pitch;
+						s.roll = roll;
+						s.yaw = yaw;
+						s.mainThrottle = followerThrottle;
+					}
 				}
 
-				// Use AA integration if available, otherwise use direct control
-				// AA provides better stability and removes oscillations for atmospheric flight
-				AAIntegration.SetControlState(vessel, s, pitch, roll, yaw, followerThrottle);
-			}
-		}
-		
-		public void RCSKillVelocity(FlightCtrlState s)
+				public void RCSKillVelocity(FlightCtrlState s)
 		{
 			if(leader!=null && s!=null)
 			{
@@ -927,29 +1002,10 @@ namespace BurnTogetherContinue
 				Fields["cRollDamper"].guiActiveEditor = false;
 				Fields["cYawDamper"].guiActive = false;
 				Fields["cYawDamper"].guiActiveEditor = false;
-			}
-		}
-
-		void UpdateAAStatus()
-		{
-			if (AAIntegration.IsAAAvailable)
-			{
-				if (isFollowing && AAIntegration.IsAAActiveOnVessel(vessel))
-				{
-					aaStatusGui = "Active";
+					}
 				}
-				else
-				{
-					aaStatusGui = "Available";
-				}
-			}
-			else
-			{
-				aaStatusGui = "Not Installed";
-			}
-		}
 
 
-	}
-}
+			}
+			}
 
