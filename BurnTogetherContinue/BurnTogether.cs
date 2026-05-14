@@ -28,9 +28,11 @@ namespace BurnTogetherContinue
 		private AnimationState[] indicatorStates;
 		private bool beginWarp = true;
 
-		[KSPField(isPersistant = false, guiActive = true, guiName = "Status")]
+		[KSPField(isPersistant = false, guiActive = true, guiName = "Status", 
+			groupName = "BurnTogether", groupDisplayName = "Burn Together", groupStartCollapsed = false)]
 		public string statusGui = "Off";
-		[KSPField(isPersistant = false, guiActive = true, guiName = "AG Mimic")]
+
+		[KSPField(isPersistant = false, guiActive = true, guiName = "AG Mimic", groupName = "BurnTogether")]
 		public bool mimicAG = false;
 
 		string debugString = string.Empty;
@@ -54,48 +56,38 @@ namespace BurnTogetherContinue
 		Vector3d autoKd = Vector3d.one * 500;
 		double lastAutotuneTime = 0;
 
-		[KSPField(isPersistant = true, guiActive = true, guiName = "Damper")]
-		public string damperDebug;
-		//[KSPField(isPersistant = true, guiActive = true, guiName = "CA")]
-		//public string caDebug;
-		//[KSPField(isPersistant = true, guiActive = true, guiName = "MoI")]
-		//public string moiDebug;
+		// PID multipliers (user tweakable)
+		[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = false, guiName = "P Multiplier", groupName = "BurnTogether"),
+		 UI_FloatRange(minValue = 0.1f, maxValue = 3.0f, stepIncrement = 0.05f, scene = UI_Scene.All)]
+		public float pMultiplier = 1.0f;
 
-		[KSPField(isPersistant = true, guiActive = false, guiActiveEditor = false, guiName = "Pitch Damper"),
-		 UI_FloatRange(minValue = 0, maxValue = 800, stepIncrement = 1f, scene = UI_Scene.All)]
-		public float cPitchDamper = 500;
-		[KSPField(isPersistant = true, guiActive = false, guiActiveEditor = false, guiName = "Roll Damper"),
-		 UI_FloatRange(minValue = 0, maxValue = 800, stepIncrement = 1f, scene = UI_Scene.All)]
-		public float cRollDamper = 350;
-		[KSPField(isPersistant = true, guiActive = false, guiActiveEditor = false, guiName = "Yaw Damper"),
-		 UI_FloatRange(minValue = 0, maxValue = 800, stepIncrement = 1f, scene = UI_Scene.All)]
-		public float cYawDamper = 500;
+		[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = false, guiName = "I Multiplier", groupName = "BurnTogether"),
+		  UI_FloatRange(minValue = 0.1f, maxValue = 3.0f, stepIncrement = 0.05f, scene = UI_Scene.All)]
+		 public float iMultiplier = 1.0f;
 
-		[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = false, guiName = "Custom "), 
-		 UI_Toggle(disabledText = "Damping Off", enabledText = "Damping On")]
-		public bool customDamping = false;
-		bool displayingDamper = true;
+		 [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = false, guiName = "D Multiplier", groupName = "BurnTogether"),
+		  UI_FloatRange(minValue = 0.1f, maxValue = 3.0f, stepIncrement = 0.05f, scene = UI_Scene.All)]
+		 public float dMultiplier = 1.0f;
 
-		[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = false, guiName = "PID Mode"), 
-		 UI_Toggle(disabledText = "Off", enabledText = "On")]
-		public bool pidMode = true;
+		 [KSPField(isPersistant = true, guiActive = true, guiName = "PID Gains", groupName = "BurnTogether")]
+		 public string pidGainsDebug;
 
-		[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = false, guiName = "Overdrive"), 
-		 UI_Toggle(disabledText = "Off", enabledText = "On")]
-		public bool torqueOverdrive = false;
+		 [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = false, guiName = "Overdrive", groupName = "BurnTogether"), 
+		  UI_Toggle(disabledText = "Off", enabledText = "On")]
+		 public bool torqueOverdrive = false;
 
-		public LineRenderer foof; //debug
-        
-		#region GUIButtons
-		//===============GUI Buttons===================
-		[KSPEvent(guiActive = true, guiName = "Set as Leader")]
-		public void SetAsLeader()
-		{
-			SetOff ();
-			//Events["ToggleAGM"].active = true;
-			isLeader = true;
-			ScreenMessages.PostScreenMessage(this.vessel.vesselName+" set as leader", 5, ScreenMessageStyle.UPPER_CENTER);
-			statusGui = "Leading";
+		 public LineRenderer foof; //debug
+
+		 #region GUIButtons
+		 //===============GUI Buttons===================
+		 [KSPEvent(guiActive = true, guiName = "Set as Leader")]
+		 public void SetAsLeader()
+		 {
+			 SetOff ();
+			 //Events["ToggleAGM"].active = true;
+			 isLeader = true;
+			 ScreenMessages.PostScreenMessage(this.vessel.vesselName+" set as leader", 5, ScreenMessageStyle.UPPER_CENTER);
+			 statusGui = "Leading";
 			
 			this.vessel.OnFlyByWire += new FlightInputCallback(LimitLeaderThrottle);
 			
@@ -475,17 +467,15 @@ namespace BurnTogetherContinue
 
 				SetOff ();
 
-				part.OnJustAboutToBeDestroyed += new Callback(SetOff);
-			}
+					part.OnJustAboutToBeDestroyed += new Callback(SetOff);
+				}
 
 
-			public override void OnUpdate()
-			{
-				ShowHideCustomDamper();
-
-				if(HighLogic.LoadedSceneIsFlight)
+				public override void OnUpdate()
 				{
-					if(isLeader)
+					if(HighLogic.LoadedSceneIsFlight)
+					{
+						if(isLeader)
 					{
 						MoveWarpFollowers();
 					}
@@ -714,13 +704,17 @@ namespace BurnTogetherContinue
 				double baseI = atmosphericMode ? 0.25 : 0.12;
 				autoKi.x = Utils.Clamp(baseI * autoKp.x, 0.05, 0.4);
 				autoKi.y = Utils.Clamp(baseI * autoKp.y, 0.05, 0.4);
-				autoKi.z = Utils.Clamp(baseI * autoKp.z, 0.05, 0.4);
 
-				// Debug output
-				damperDebug = "P:" + autoKp.x.ToString("F2") + " I:" + autoKi.x.ToString("F2") + " D:" + autoKd.x.ToString("F0");
-			}
-			catch (Exception ex)
-			{
+						// Apply user multipliers
+						autoKp *= pMultiplier;
+						autoKi *= iMultiplier;
+						autoKd *= dMultiplier;
+
+						// Debug output
+						pidGainsDebug = "P:" + autoKp.x.ToString("F2") + " I:" + autoKi.x.ToString("F2") + " D:" + autoKd.x.ToString("F0");
+					}
+					catch (Exception ex)
+					{
 						Debug.LogWarning("[BurnTogether] Autotune error: " + ex.Message);
 					}
 				}
@@ -730,98 +724,54 @@ namespace BurnTogetherContinue
 			if(leader!=null && s!=null)
 			{
 				double maxControl = torqueOverdrive ? 1.5 : 1.0;
-				Vector3d damper = Vector3d.zero;
-				Vector3 centerOfMass = vessel.CoM;
-				Vector3 momentOfInertia = vessel.localCoM;
 
-				// Calculate damping coefficients for legacy PD mode
-				if(!customDamping)
-				{
-					Vector3d torque = Utils.GetTorque(vessel, 0);
-					Vector3d effectiveInertia = Utils.GetEffectiveInertia(vessel, torque);
-					Vector3d controlAuthority = Vector3d.Scale(torque, Utils.Inverse(momentOfInertia));
-					damper = 4500 * Utils.Inverse(Utils.Abs(controlAuthority)+Vector3d.one);
+				// Run autotune periodically to adapt to vessel changes
+				AutotunePID();
 
-					// Increased roll damping
-					damper = Vector3d.Scale(damper, new Vector3d(1, 1.2, 1));
+				// PID controller with integral term
+				double dt = TimeWarp.fixedDeltaTime;
 
-					damper = Utils.ClampAxes(damper, 180, 750);
-				}
-				else
-				{
-					damper = new Vector3(cPitchDamper, cRollDamper, cYawDamper);
-				}
+				// Accumulate integral (with anti-windup)
+				pitchIntegral += prevPitchAngle * dt;
+				rollIntegral += prevRollAngle * dt;
+				yawIntegral += prevYawAngle * dt;
 
-				Vector3d steerMult = Vector3d.one;
-				if(atmosphericMode)
-				{
-					steerMult *= 1.2;
-					damper = new Vector3d(700,400,700);
-				}
+				// Clamp integral to prevent windup
+				pitchIntegral = Utils.Clamp(pitchIntegral, -maxIntegral, maxIntegral);
+				rollIntegral = Utils.Clamp(rollIntegral, -maxIntegral, maxIntegral);
+				yawIntegral = Utils.Clamp(yawIntegral, -maxIntegral, maxIntegral);
 
-				double damperPitch = Math.Abs(damper.x);
-				double damperRoll = Math.Abs(damper.y);
-				double damperYaw = Math.Abs(damper.z);
+				// Use autotuned gains with user multipliers
+				float pitch = (float)Utils.Clamp(
+					(autoKp.x * prevPitchAngle) + 
+					(autoKi.x * pitchIntegral) + 
+					(autoKd.x * pitchAngVel), 
+					-maxControl, maxControl);
 
-				float pitch, roll, yaw;
+				float roll = (float)Utils.Clamp(
+					(autoKp.y * prevRollAngle) + 
+					(autoKi.y * rollIntegral) + 
+					(autoKd.y * rollAngVel), 
+					-maxControl, maxControl);
 
-				if (pidMode)
-				{
-					// Run autotune periodically to adapt to vessel changes
-					AutotunePID();
+				float yaw = (float)Utils.Clamp(
+					(autoKp.z * prevYawAngle) + 
+					(autoKi.z * yawIntegral) + 
+					(autoKd.z * yawAngVel), 
+					-maxControl, maxControl);
 
-					// PID controller with integral term to reduce oscillations
-					double dt = TimeWarp.fixedDeltaTime;
-
-					// Accumulate integral (with anti-windup)
-					pitchIntegral += prevPitchAngle * dt;
-					rollIntegral += prevRollAngle * dt;
-					yawIntegral += prevYawAngle * dt;
-
-					// Clamp integral to prevent windup
-					pitchIntegral = Utils.Clamp(pitchIntegral, -maxIntegral, maxIntegral);
-					rollIntegral = Utils.Clamp(rollIntegral, -maxIntegral, maxIntegral);
-					yawIntegral = Utils.Clamp(yawIntegral, -maxIntegral, maxIntegral);
-
-					// Use autotuned gains
-					pitch = (float)Utils.Clamp(
-						(autoKp.x * prevPitchAngle) + 
-						(autoKi.x * pitchIntegral) + 
-						(autoKd.x * pitchAngVel), 
-						-maxControl, maxControl);
-
-					roll = (float)Utils.Clamp(
-						(autoKp.y * prevRollAngle) + 
-						(autoKi.y * rollIntegral) + 
-						(autoKd.y * rollAngVel), 
-						-maxControl, maxControl);
-
-						yaw = (float)Utils.Clamp(
-							(autoKp.z * prevYawAngle) + 
-							(autoKi.z * yawIntegral) + 
-							(autoKd.z * yawAngVel), 
-							-maxControl, maxControl);
-					}
-					else
-				{
-					// Original PD controller (no integral)
-					pitch = (float)Utils.Clamp((steerMult.x*prevPitchAngle)+(damperPitch*pitchAngVel), -maxControl, maxControl);
-					roll = (float)Utils.Clamp((steerMult.y*prevRollAngle)+(damperRoll*rollAngVel), -maxControl, maxControl);
-					yaw = (float)Utils.Clamp((steerMult.z*prevYawAngle)+(damperYaw*yawAngVel), -maxControl, maxControl);
-				}
-
-
-				//limit angular momentum
-				Vector3d localAngMomentum = Vector3d.Scale(momentOfInertia, new Vector3d(pitchAngVel, rollAngVel, yawAngVel));
-				double maxAngMomentum = .075f;
-				if((int)Mathf.Sign(pitch) != Math.Sign(pitchAngVel) && Math.Abs(localAngMomentum.x) > maxAngMomentum)
-				{
-					pitch = 0;
-				}
-				if((int)Mathf.Sign(roll) != Math.Sign(rollAngVel) && Math.Abs(localAngMomentum.y) > maxAngMomentum)
-				{
-					roll = 0;
-				}
+						// Limit angular momentum
+						Vector3 momentOfInertia = vessel.localCoM;
+						Vector3d localAngMomentum = Vector3d.Scale(momentOfInertia, new Vector3d(pitchAngVel, rollAngVel, yawAngVel));
+						double maxAngMomentum = .075f;
+						if((int)Mathf.Sign(pitch) != Math.Sign(pitchAngVel) && Math.Abs(localAngMomentum.x) > maxAngMomentum)
+						{
+							pitch = 0;
+						}
+						if((int)Mathf.Sign(roll) != Math.Sign(rollAngVel) && Math.Abs(localAngMomentum.y) > maxAngMomentum)
+						{
+							roll = 0;
+						}
 						if((int)Mathf.Sign(yaw) != Math.Sign(yawAngVel) && Math.Abs(localAngMomentum.z) > maxAngMomentum)
 						{
 							yaw = 0;
@@ -970,42 +920,15 @@ namespace BurnTogetherContinue
 					}
 				}
 				foreach (ModuleEnginesFX me in p.FindModulesImplementing<ModuleEnginesFX>())
-				{
-					if(me.EngineIgnited)
-					{
-						totalThrust += me.finalThrust;
+							{
+								if(me.EngineIgnited)
+								{
+									totalThrust += me.finalThrust;
+								}
+							}
+						}
+						return totalThrust/vesselMass;
 					}
 				}
-			}
-			return totalThrust/vesselMass;
-			
-		}
-
-		void ShowHideCustomDamper()
-		{
-			if(customDamping && !displayingDamper)
-			{
-				displayingDamper = true;
-				Fields["cPitchDamper"].guiActive = true;
-				Fields["cPitchDamper"].guiActiveEditor = true;
-				Fields["cRollDamper"].guiActive = true;
-				Fields["cRollDamper"].guiActiveEditor = true;
-				Fields["cYawDamper"].guiActive = true;
-				Fields["cYawDamper"].guiActiveEditor = true;
-			}
-			else if(!customDamping && displayingDamper)
-			{
-				displayingDamper = false;
-				Fields["cPitchDamper"].guiActive = false;
-				Fields["cPitchDamper"].guiActiveEditor = false;
-				Fields["cRollDamper"].guiActive = false;
-				Fields["cRollDamper"].guiActiveEditor = false;
-				Fields["cYawDamper"].guiActive = false;
-				Fields["cYawDamper"].guiActiveEditor = false;
-					}
 				}
-
-
-			}
-			}
 
